@@ -1,0 +1,6 @@
+# 每日 02:15 以低优先级执行（路径请改为实际克隆目录）
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# 复制 lab_ops.conf.example -> config/lab_ops.conf 后编辑
+15 2 * * * lab /opt/lab-ops/scripts/run_all.sh /data >>/var/lib/lab-ops/logs/cron.log 2>&1

@@ -1,0 +1,66 @@
+实验室共享存储与 Docker 资产自动化运维流水线 — 使用说明
+============================================================
+
+一、目录说明
+  config/lab_ops.conf.example   默认配置样例（复制为 lab_ops.conf 后修改）
+  config/docker_whitelist.txt  Docker 容器白名单（ID / 短 ID / 名称逐行）
+  lib/common.sh                 公共函数与配置加载
+  scripts/disk_audit_tsv.sh     按属主 + 扩展名聚合，输出 TSV 报表
+  scripts/dedupe_hardlink.sh    同大小 + MD5 去重并硬链接合并
+  scripts/docker_audit.sh       退出容器 / 虚悬镜像 / dangling volume 巡检
+  scripts/classify_by_magic.sh  file 魔数识别 mime（抽样）
+  scripts/run_all.sh            串联入口（供 cron 调用）
+  crontab.example               定时任务示例
+
+二、部署（在 Linux 实验机上）
+  1) 复制配置
+       cp config/lab_ops.conf.example config/lab_ops.conf
+       编辑 LAB_OPS_SCAN_ROOT、LAB_OPS_REPORT_DIR、LAB_OPS_LOG_DIR 等。
+  2) 首次务必保持 LAB_OPS_DRY_RUN=1，在 reports/、logs/ 中检查输出。
+     未复制 lab_ops.conf 时，默认扫描根为项目内 test/（仓库自带样例文件）。
+  3) 赋予执行权限
+       chmod +x scripts/*.sh
+  3b) 若在 Windows 编辑后在 WSL 运行报 $'\r': command not found，执行：
+       sed -i 's/\r$//' lib/*.sh scripts/*.sh config/*.conf config/*.example crontab.example
+       或: bash scripts/fix_crlf.sh
+  4) 单步验证
+       ./scripts/disk_audit_tsv.sh /path/to/small-test-dir
+       ./scripts/docker_audit.sh
+       ./scripts/dedupe_hardlink.sh /path/to/small-test-dir
+  5) 确认无误后，在 lab_ops.conf 中设 LAB_OPS_DRY_RUN=0，并谨慎开启
+       LAB_OPS_RUN_DEDUPE=1（去重会改写 inode，请先小目录验证）。
+
+三、与课程要求的对应关系
+  - Shell + 管道/重定向：各脚本 stdout/stderr 分流至报表与 *_errors.log。
+  - grep/sed/awk：审计核心为 awk 聚合；计划书中的 sed 清洗可在生成 CSV 时自行加一层。
+  - find/stat：使用 GNU find 的 %u/%s/%P 与 -xdev 限制单文件系统。
+  - 硬链接：dedupe 使用 ln -f。
+  - Docker：docker ps / inspect / rmi / volume rm（受 DRY_RUN 与 whitelist 约束）。
+  - crontab：参考 crontab.example，用 nice/ionice 降低优先级（run_all 已 nice）。
+
+四、二次确认机制（新增）
+  为防止误删实验室核心数据，系统在正式模式 (LAB_OPS_DRY_RUN=0) 下会自动触发
+  交互式二次确认。
+
+  确认流程:
+    1) DRY_RUN=1（默认）: 仅生成报表，不执行任何清理，无需确认
+    2) DRY_RUN=0: 生成报表后，展示预计清理清单，等待用户输入 y/N 确认
+    3) 30-45 秒超时自动拒绝，默认答案为 N（不执行）
+
+  跳过确认（仅供 cron / 无人值守场景）:
+    - 命令行传 -y/--yes/--force
+    - 或设置环境变量 LAB_OPS_FORCE=1
+    - 示例: ./scripts/run_all.sh -y
+    - cron: LAB_OPS_FORCE=1 ./scripts/run_all.sh /data
+
+  逐模块确认:
+    各脚本也可独立运行并确认:
+      ./scripts/dedupe_hardlink.sh /data        # 非 dry-run 时会确认
+      ./scripts/dedupe_hardlink.sh /data -y     # 跳过确认
+      ./scripts/docker_audit.sh                 # 非 dry-run 时会确认
+      ./scripts/docker_audit.sh -y              # 跳过确认
+
+五、限制与假设
+  - 需 bash 4+、GNU find、GNU date、gawk 推荐。
+  - 路径中含制表符时，TSV/去重管道可能失真；生产环境可改为 \0 分隔 + perl/python 解析。
+  - Docker 时间解析依赖 date -d；BSD 系需自行调整。

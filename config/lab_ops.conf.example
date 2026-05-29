@@ -1,0 +1,25 @@
+# Copy to lab_ops.conf and adjust paths.
+# source from project root:  . "$(dirname "$0")/../config/lab_ops.conf"
+
+# 默认可写：项目内 test/（仓库自带样例数据，便于本地/实验机联调）
+LAB_OPS_SCAN_ROOT="${LAB_OPS_SCAN_ROOT:-$LAB_OPS_HOME/test}"
+
+# 报表与日志默认放在项目目录下（无需 /var/lib 权限）
+LAB_OPS_REPORT_DIR="${LAB_OPS_REPORT_DIR:-$LAB_OPS_HOME/reports}"
+LAB_OPS_LOG_DIR="${LAB_OPS_LOG_DIR:-$LAB_OPS_HOME/logs}"
+
+# dry-run: 1 = only print actions, 0 = execute destructive steps
+LAB_OPS_DRY_RUN="${LAB_OPS_DRY_RUN:-1}"
+
+# run_all 是否调用各子步骤（去重默认关闭，首次请手工在小目录验证）
+LAB_OPS_RUN_DEDUPE="${LAB_OPS_RUN_DEDUPE:-0}"
+LAB_OPS_RUN_DOCKER="${LAB_OPS_RUN_DOCKER:-1}"
+
+# Dedupe: minimum file size (bytes) to consider for hashing
+LAB_OPS_DEDUPE_MIN_BYTES="${LAB_OPS_DEDUPE_MIN_BYTES:-1024}"
+
+# Docker: remove exited containers older than this many days (only when LAB_OPS_DRY_RUN=0)
+LAB_OPS_DOCKER_EXITED_DAYS="${LAB_OPS_DOCKER_EXITED_DAYS:-7}"
+
+# One container name or ID per line; never remove these
+LAB_OPS_DOCKER_WHITELIST="${LAB_OPS_DOCKER_WHITELIST:-$LAB_OPS_HOME/config/docker_whitelist.txt}"

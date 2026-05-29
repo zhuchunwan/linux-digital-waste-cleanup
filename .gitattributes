@@ -1,0 +1,26 @@
+# Bash/shell 与配置在 Linux/WSL 下执行，必须使用 LF 行尾
+*.sh text eol=lf
+*.bash text eol=lf
+*.conf text eol=lf
+*.example text eol=lf
+crontab.example text eol=lf
+
+# 脚本/代码文件强制 LF
+*.py text eol=lf
+*.R text eol=lf
+*.json text eol=lf
+*.csv text eol=lf
+*.tsv text eol=lf
+*.md text eol=lf
+*.bib text eol=lf
+*.txt text eol=lf
+
+# 二进制文件
+*.bin binary
+*.dat binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.out binary
+*.part* binary
+._* binary
