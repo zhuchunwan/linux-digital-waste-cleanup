@@ -1,6 +1,30 @@
-# 每日 02:15 以低优先级执行（路径请改为实际克隆目录）
+# ============================================================================
+# lab-ops 定时任务配置 — 组员 B (Docker / 日志运维)
+# ============================================================================
+# 部署方法:
+#   1. 修改下方路径为实际项目目录
+#   2. 安装: crontab crontab.example   (将覆盖现有 crontab!)
+#   或追加: crontab -l | cat - crontab.example | crontab -
+#   3. 验证: crontab -l
+#
+# 时间格式: 分 时 日 月 星期
+# ============================================================================
+
 SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
-# 复制 lab_ops.conf.example -> config/lab_ops.conf 后编辑
-15 2 * * * lab /opt/lab-ops/scripts/run_all.sh /data >>/var/lib/lab-ops/logs/cron.log 2>&1
+# 每周一早 08:00 — 仅生成审计报表（不执行清理）
+0 8 * * 1 LAB_OPS_DRY_RUN=1 /home/sshss/project/linux-digital-waste-cleanup/scripts/run_all.sh /home/sshss/project/linux-digital-waste-cleanup/test >>/home/sshss/project/linux-digital-waste-cleanup/logs/cron_weekly.log 2>&1
+
+# ── Docker 资产巡检（仅预览）─────────────────────────────────────────────
+# 每周五 18:00 — Docker 巡检报表（不执行清理，仅通知管理员）
+0 18 * * 5 LAB_OPS_DRY_RUN=1 /home/sshss/project/linux-digital-waste-cleanup/scripts/docker_audit.sh >>/home/sshss/project/linux-digital-waste-cleanup/logs/cron_docker.log 2>&1
+
+# ── 日志清理（每周日凌晨 03:00）───────────────────────────────────────────
+0 3 * * 0 LAB_OPS_FORCE=1 /home/sshss/project/linux-digital-waste-cleanup/scripts/log_cleanup.sh /home/sshss/project/linux-digital-waste-cleanup/test 30 -y >>/home/sshss/project/linux-digital-waste-cleanup/logs/cron_log_cleanup.log 2>&1
+
+# ── lab-ops 自身报表维护（每周日凌晨 04:00）───────────────────────────────
+0 4 * * 0 LAB_OPS_FORCE=1 /home/sshss/project/linux-digital-waste-cleanup/scripts/log_cleanup.sh /home/sshss/project/linux-digital-waste-cleanup/reports 90 "*.tsv|*.txt" -y >>/home/sshss/project/linux-digital-waste-cleanup/logs/cron_self_cleanup.log 2>&1
+
+# ── 正式清理流水线（每月 1 号凌晨 02:00）─────────────────────────────────
+0 2 1 * * LAB_OPS_FORCE=1 /home/sshss/project/linux-digital-waste-cleanup/scripts/run_all.sh /home/sshss/project/linux-digital-waste-cleanup/test -y >>/home/sshss/project/linux-digital-waste-cleanup/logs/cron_monthly.log 2>&1

@@ -21,5 +21,22 @@ LAB_OPS_DEDUPE_MIN_BYTES="${LAB_OPS_DEDUPE_MIN_BYTES:-1024}"
 # Docker: remove exited containers older than this many days (only when LAB_OPS_DRY_RUN=0)
 LAB_OPS_DOCKER_EXITED_DAYS="${LAB_OPS_DOCKER_EXITED_DAYS:-7}"
 
+# Docker: 待删除预告时长（小时）。候选资产先进入"预告清单"，
+# 下次运行且超过此时长后才真正删除。设为 0 则立即删除（关闭预告）。
+LAB_OPS_DOCKER_PENDING_HOURS="${LAB_OPS_DOCKER_PENDING_HOURS:-24}"
+
 # One container name or ID per line; never remove these
 LAB_OPS_DOCKER_WHITELIST="${LAB_OPS_DOCKER_WHITELIST:-$LAB_OPS_HOME/config/docker_whitelist.txt}"
+
+# ── 日志清理模块配置 ──────────────────────────────────────────────────────
+# 默认清理目录（log_cleanup.sh 无参数时使用）
+LAB_OPS_LOG_CLEANUP_DIR="${LAB_OPS_LOG_CLEANUP_DIR:-/var/log}"
+
+# 日志保留天数（超过此天数的日志文件将被清理）
+LAB_OPS_LOG_RETENTION_DAYS="${LAB_OPS_LOG_RETENTION_DAYS:-30}"
+
+# 日志文件名匹配模式（管道分隔；不含* 时脚本会自动加 * 匹配）
+LAB_OPS_LOG_PATTERNS="${LAB_OPS_LOG_PATTERNS:-*.log|*.LOG|*.log.*|*.out|core.*|nohup.out}"
+
+# run_all 是否调用日志清理步骤（默认偶尔清理，防止污染测试数据）
+LAB_OPS_RUN_LOG_CLEANUP="${LAB_OPS_RUN_LOG_CLEANUP:-0}"
