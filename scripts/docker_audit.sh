@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Docker 资产巡检：已退出超 N 天容器、虚悬镜像、dangling volume；白名单 + DRY_RUN
-# 依赖: docker 命令、GNU date
+# Docker 资产巡检与回收：显示候选容器、镜像、数据卷，用户确认后回收。
 
 set -euo pipefail
 
@@ -13,100 +12,110 @@ DAYS="${LAB_OPS_DOCKER_EXITED_DAYS:-7}"
 WL="${LAB_OPS_DOCKER_WHITELIST}"
 REPORT="${LAB_OPS_REPORT_DIR}/docker_audit_$(date +%Y-%m-%d).txt"
 
-# 解析 -y 参数
-AUTO_YES=0
-for arg in "$@"; do
-  case "$arg" in
-    -y|--yes|--force) AUTO_YES=1; export LAB_OPS_FORCE=1 ;;
-  esac
-done
-
-lab_ops_log "docker_audit: days=$DAYS dry_run=$LAB_OPS_DRY_RUN report=$REPORT"
+lab_ops_log "docker_audit: days=$DAYS report=$REPORT"
 
 command -v docker >/dev/null || {
-  lab_ops_log "ERROR: docker not in PATH"
-  exit 1
+  {
+    echo "Docker 资产巡检报告"
+    echo "Docker 命令不存在，本机跳过 Docker 巡检。"
+    echo "请在安装 Docker 的 Linux/WSL2/服务器环境运行此功能。"
+  } | tee "$REPORT"
+  lab_ops_log "docker_audit: docker not in PATH"
+  exit 0
 }
 
-is_whitelisted() {
+is_container_whitelisted() {
   local id="$1" short="${1:0:12}" name="$2"
   [[ -f "$WL" ]] || return 1
   while IFS= read -r line || [[ -n "$line" ]]; do
-    [[ "$line" =~ ^[[:space:]]*# ]] && continue
-    [[ -z "${line// }" ]] && continue
-    if [[ "$line" == "$id" || "$line" == "$short" || "$line" == "$name" ]]; then
-      return 0
-    fi
+    line="${line%%#*}"
+    line="${line#"${line%%[![:space:]]*}"}"
+    line="${line%"${line##*[![:space:]]}"}"
+    [[ -z "$line" ]] && continue
+    [[ "$line" == "$id" || "$line" == "$short" || "$line" == "$name" ]] && return 0
   done <"$WL"
   return 1
 }
 
-# 正式模式下的二次确认
-if ! lab_ops_is_true "$LAB_OPS_DRY_RUN"; then
-  if [[ "$AUTO_YES" == "0" ]]; then
-    lab_ops_confirm "Docker 巡检模块: 将对以下资产进行清理:
-  - 停止超过 ${DAYS} 天的退出容器 (docker rm)
-  - 无标签虚悬镜像 (docker rmi)
-  - 未挂载僵尸数据卷 (docker volume rm)
-白名单文件: ${WL}
-审计报告将保存至: ${REPORT}" 30 || {
-      lab_ops_log "docker_audit: 用户取消 Docker 清理操作"
-      echo "  Docker 清理操作已取消。" >&2
-      exit 0
-    }
-  else
-    lab_ops_log "docker_audit: -y 模式，跳过交互确认"
-  fi
-fi
-
 cutoff_epoch="$(date -d "-${DAYS} days" +%s 2>/dev/null || date -v-"${DAYS}d" +%s)"
+containers=()
+images=()
+volumes=()
 
 {
-  echo "=== Exited containers older than ${DAYS}d (compare FinishedAt epoch) ==="
-  while read -r cid name; do
-    [[ -z "$cid" ]] && continue
-    if is_whitelisted "$cid" "$name"; then
-      echo "SKIP whitelist: $cid $name"
-      continue
-    fi
-    fin="$(docker inspect -f '{{.State.FinishedAt}}' "$cid" 2>/dev/null || true)"
-    [[ -z "$fin" || "$fin" == "<no value>" ]] && continue
-    fin_epoch="$(date -d "$fin" +%s 2>/dev/null || date -j -f "%Y-%m-%dT%H:%M:%S" "${fin:0:19}" +%s 2>/dev/null || echo 0)"
-    if [[ "$fin_epoch" -eq 0 ]]; then
-      echo "SKIP bad timestamp: $cid $name fin=$fin"
-      continue
-    fi
-    if [[ "$fin_epoch" -lt "$cutoff_epoch" ]]; then
-      echo "CANDIDATE rm: $cid $name finished=$fin"
-      if ! lab_ops_is_true "$LAB_OPS_DRY_RUN"; then
-        docker rm "$cid" && lab_ops_log "docker_audit: removed container $cid"
-      fi
-    fi
-  done < <(docker ps -a --filter "status=exited" --format '{{.ID}} {{.Names}}' 2>/dev/null || true)
-
-  echo
-  echo "=== Dangling images (docker images -f dangling=true) ==="
-  mapfile -t dimgs < <(docker images -f dangling=true -q 2>/dev/null || true)
-  if ((${#dimgs[@]} == 0)); then
-    echo "(none)"
-  else
-    printf '%s\n' "${dimgs[@]}"
-    if ! lab_ops_is_true "$LAB_OPS_DRY_RUN"; then
-      docker rmi "${dimgs[@]}" 2>/dev/null || lab_ops_log "docker_audit: docker rmi had partial failures (see stderr)"
-    fi
-  fi
-
-  echo
-  echo "=== Dangling volumes ==="
-  mapfile -t dvols < <(docker volume ls -q -f dangling=true 2>/dev/null || true)
-  if ((${#dvols[@]} == 0)); then
-    echo "(none)"
-  else
-    printf '%s\n' "${dvols[@]}"
-    if ! lab_ops_is_true "$LAB_OPS_DRY_RUN"; then
-      docker volume rm "${dvols[@]}" 2>/dev/null || lab_ops_log "docker_audit: docker volume rm had partial failures"
-    fi
-  fi
+  echo "Docker 资产巡检报告"
+  echo "生成时间: $(date '+%Y-%m-%d %H:%M:%S')"
+  echo "容器白名单: $WL"
+  echo ""
+  echo "一、退出超过 ${DAYS} 天的容器"
 } | tee "$REPORT"
 
-lab_ops_log "docker_audit: report written $REPORT"
+while read -r cid name; do
+  [[ -z "$cid" ]] && continue
+  if is_container_whitelisted "$cid" "$name"; then
+    echo "跳过白名单容器: $cid $name" | tee -a "$REPORT"
+    continue
+  fi
+  fin="$(docker inspect -f '{{.State.FinishedAt}}' "$cid" 2>/dev/null || true)"
+  [[ -z "$fin" || "$fin" == "<no value>" ]] && continue
+  fin_epoch="$(date -d "$fin" +%s 2>/dev/null || date -j -f "%Y-%m-%dT%H:%M:%S" "${fin:0:19}" +%s 2>/dev/null || echo 0)"
+  if [[ "$fin_epoch" -gt 0 && "$fin_epoch" -lt "$cutoff_epoch" ]]; then
+    containers+=("$cid")
+    echo "候选容器: $cid $name finished=$fin" | tee -a "$REPORT"
+  fi
+done < <(docker ps -a --filter "status=exited" --format '{{.ID}} {{.Names}}' 2>/dev/null || true)
+
+((${#containers[@]} == 0)) && echo "无" | tee -a "$REPORT"
+
+echo "" | tee -a "$REPORT"
+echo "二、虚悬镜像 dangling images" | tee -a "$REPORT"
+mapfile -t images < <(docker images -f dangling=true -q 2>/dev/null | sort -u || true)
+if ((${#images[@]} == 0)); then
+  echo "无" | tee -a "$REPORT"
+else
+  printf '候选镜像: %s\n' "${images[@]}" | tee -a "$REPORT"
+fi
+
+echo "" | tee -a "$REPORT"
+echo "三、僵尸数据卷 dangling volumes" | tee -a "$REPORT"
+mapfile -t volumes < <(docker volume ls -q -f dangling=true 2>/dev/null | sort -u || true)
+if ((${#volumes[@]} == 0)); then
+  echo "无" | tee -a "$REPORT"
+else
+  printf '候选数据卷: %s\n' "${volumes[@]}" | tee -a "$REPORT"
+fi
+
+total=$(( ${#containers[@]} + ${#images[@]} + ${#volumes[@]} ))
+echo "" | tee -a "$REPORT"
+echo "候选回收资产总数: $total" | tee -a "$REPORT"
+echo "报告已保存: $REPORT"
+
+if ((total == 0)); then
+  lab_ops_log "docker_audit: no docker assets to remove"
+  exit 0
+fi
+
+if [[ ! -t 0 ]]; then
+  echo "当前不是交互式终端，自动返回，不回收任何 Docker 资产。"
+  lab_ops_log "docker_audit: non-interactive terminal, cancelled"
+  exit 0
+fi
+
+answer=""
+read -r -t 30 -p "确认回收以上 Docker 资产吗？请输入 y 确认，30 秒未确认自动返回: " answer || true
+echo ""
+case "$answer" in
+  y|Y|yes|YES)
+    for cid in "${containers[@]}"; do
+      docker rm "$cid" && lab_ops_log "docker_audit: removed container $cid"
+    done
+    ((${#images[@]} > 0)) && docker rmi "${images[@]}" 2>/dev/null || true
+    ((${#volumes[@]} > 0)) && docker volume rm "${volumes[@]}" 2>/dev/null || true
+    echo "Docker 资产回收完成。"
+    lab_ops_log "docker_audit: removed containers=${#containers[@]} images=${#images[@]} volumes=${#volumes[@]}"
+    ;;
+  *)
+    echo "未确认或超时，已返回，不回收 Docker 资产。"
+    lab_ops_log "docker_audit: cancelled or timeout"
+    ;;
+esac

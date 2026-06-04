@@ -1,2 +1,0 @@
-Lab shared storage audit demo.
-Extensions and owners are aggregated in the daily TSV report.

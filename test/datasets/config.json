@@ -1,5 +1,0 @@
-{
-  "project": "lab-ops-test",
-  "epochs": 3,
-  "batch": 32
-}

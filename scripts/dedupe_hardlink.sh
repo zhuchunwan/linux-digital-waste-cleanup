@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# 文件大小初筛 + MD5 精筛；重复文件硬链接到同一 inode（保留字典序最小路径为主文件）
-# 用法: dedupe_hardlink.sh [扫描根目录]
+# 重复文件清理：扫描重复文件，显示在屏幕上，用户 30 秒内确认后删除重复副本。
 
 set -euo pipefail
 
@@ -11,129 +10,125 @@ lab_ops_load_config
 
 SCAN_ROOT="${1:-$LAB_OPS_SCAN_ROOT}"
 MIN_BYTES="${LAB_OPS_DEDUPE_MIN_BYTES:-1024}"
+DATE="$(date +%Y-%m-%d)"
+REPORT="${LAB_OPS_REPORT_DIR}/duplicate_files_${DATE}.txt"
 PLAN_LOG="${LAB_OPS_LOG_DIR}/dedupe_plan.log"
-
-# 解析 -y 参数
-AUTO_YES=0
-for arg in "$@"; do
-  case "$arg" in
-    -y|--yes|--force) AUTO_YES=1; export LAB_OPS_FORCE=1 ;;
-  esac
-done
-
-lab_ops_log "dedupe: scan_root=$SCAN_ROOT min_bytes=$MIN_BYTES dry_run=$LAB_OPS_DRY_RUN"
+ERR="${LAB_OPS_LOG_DIR}/dedupe_errors.log"
 
 if [[ ! -d "$SCAN_ROOT" ]]; then
-  lab_ops_log "ERROR: not a directory: $SCAN_ROOT"
+  echo "错误：不是有效文件夹: $SCAN_ROOT" >&2
+  lab_ops_log "dedupe: invalid directory $SCAN_ROOT"
   exit 1
 fi
 
 command -v md5sum >/dev/null || {
-  lab_ops_log "ERROR: md5sum not found"
+  echo "错误：找不到 md5sum 命令。" >&2
+  lab_ops_log "dedupe: md5sum not found"
   exit 1
 }
 
-TMPDIR="${TMPDIR:-/tmp}"
-WORKDIR="$(mktemp -d "$TMPDIR/lab-dedupe.XXXXXX")"
-cleanup() { rm -rf "$WORKDIR"; }
-trap cleanup EXIT
+SCAN_ROOT="$(cd "$SCAN_ROOT" && pwd -P)"
+: >"$PLAN_LOG"
+: >"$REPORT"
 
-LIST="$WORKDIR/by_size.tsv"
-DUP_SAME_SIZE="$WORKDIR/dup_same_size.tsv"
+lab_ops_log "dedupe: scan_root=$SCAN_ROOT min_bytes=$MIN_BYTES report=$REPORT"
 
-nice -n 10 find "$SCAN_ROOT" -xdev -type f -size "+${MIN_BYTES}c" -printf '%s\t%p\n' 2>>"${LAB_OPS_LOG_DIR}/dedupe_errors.log" \
-  | LC_ALL=C sort -t "$(printf '\t')" -k1,1n >"$LIST"
+declare -A paths_by_hash=()
+declare -A sizes_by_hash=()
 
-awk '
-function path_field(   p) {
-  p = $0;
-  sub(/^[^\t]+\t/, "", p);
-  return p;
-}
-function flush(   i) {
-  if (n < 2) return;
-  for (i = 1; i <= n; i++) print sz "\t" paths[i];
-}
-NR == 1 { sz = $1; n = 1; paths[1] = path_field(); next }
-{
-  if ($1 == sz) {
-    n++;
-    paths[n] = path_field();
-    next;
-  }
-  flush();
-  sz = $1;
-  n = 1;
-  paths[1] = path_field();
-}
-END { flush(); }
-' "$LIST" >"$DUP_SAME_SIZE"
-
-# 正式模式下的二次确认
-if ! lab_ops_is_true "$LAB_OPS_DRY_RUN"; then
-  dup_count=$(wc -l <"$DUP_SAME_SIZE")
-  if [[ "$AUTO_YES" == "0" ]]; then
-    lab_ops_confirm "去重模块: 发现 ${dup_count} 组相同大小的文件待处理。
-将对 MD5 一致的重复文件执行硬链接替换 (ln -f)。
-去重计划详见: ${PLAN_LOG}" 30 || {
-      lab_ops_log "dedupe: 用户取消去重操作"
-      echo "  去重操作已取消。" >&2
-      exit 0
-    }
-  else
-    lab_ops_log "dedupe: -y 模式，跳过交互确认"
-  fi
-fi
-
-flush_md5_bucket() {
-  ((${#bucket[@]} < 2)) && {
-    bucket=()
-    return
-  }
-  declare -A paths_by_hash=()
-  local p h
-  for p in "${bucket[@]}"; do
-    h="$(md5sum "$p" | awk '{print $1}')"
-    if [[ -n "${paths_by_hash[$h]:-}" ]]; then
-      paths_by_hash[$h]="${paths_by_hash[$h]}"$'\n'"$p"
-    else
-      paths_by_hash[$h]="$p"
-    fi
-  done
-  local keeper dup sorted
-  for h in "${!paths_by_hash[@]}"; do
-    mapfile -t sorted < <(printf '%s\n' "${paths_by_hash[$h]}" | LC_ALL=C sort)
-    ((${#sorted[@]} < 2)) && continue
-    keeper="${sorted[0]}"
-    for ((i = 1; i < ${#sorted[@]}; i++)); do
-      dup="${sorted[$i]}"
-      if lab_ops_is_true "$LAB_OPS_DRY_RUN"; then
-        printf 'DRY_RUN ln -f %q %q\n' "$keeper" "$dup" | tee -a "$PLAN_LOG" >&2
-      else
-        ln -f "$keeper" "$dup"
-        lab_ops_log "dedupe: ln -f keeper=$keeper dup=$dup"
-      fi
-    done
-  done
-  bucket=()
-}
-
-cur_sz=""
-bucket=()
-while IFS=$'\t' read -r sz path; do
-  if [[ -z "${cur_sz}" ]]; then
-    cur_sz="$sz"
-    bucket=("$path")
+while IFS= read -r -d '' file; do
+  if lab_ops_is_path_whitelisted "$file"; then
+    lab_ops_log "dedupe: skip whitelist file=$(basename "$file") path=$file"
     continue
   fi
-  if [[ "$sz" != "$cur_sz" ]]; then
-    flush_md5_bucket
-    cur_sz="$sz"
-    bucket=("$path")
+  size="$(stat -c %s "$file" 2>>"$ERR" || echo 0)"
+  ((size < MIN_BYTES)) && continue
+  hash="$(md5sum "$file" 2>>"$ERR" | awk '{print $1}' || true)"
+  [[ -z "$hash" ]] && continue
+  sizes_by_hash["$hash"]="$size"
+  if [[ -n "${paths_by_hash[$hash]:-}" ]]; then
+    paths_by_hash["$hash"]="${paths_by_hash[$hash]}"$'\n'"$file"
   else
-    bucket+=("$path")
+    paths_by_hash["$hash"]="$file"
   fi
-done <"$DUP_SAME_SIZE"
-flush_md5_bucket
+done < <(find "$SCAN_ROOT" -xdev -type f -print0 2>>"$ERR")
 
-lab_ops_log "dedupe: finished."
+{
+  echo "重复文件扫描报告"
+  echo "扫描目录: $SCAN_ROOT"
+  echo "生成时间: $(date '+%Y-%m-%d %H:%M:%S')"
+  echo "白名单文件: $LAB_OPS_FILE_WHITELIST"
+  echo "小于 ${MIN_BYTES} bytes 的文件已跳过"
+  echo ""
+} | tee "$REPORT"
+
+duplicate_count=0
+release_bytes=0
+delete_list=()
+group_no=0
+
+for hash in "${!paths_by_hash[@]}"; do
+  mapfile -t files < <(printf '%s\n' "${paths_by_hash[$hash]}" | LC_ALL=C sort)
+  ((${#files[@]} < 2)) && continue
+  group_no=$((group_no + 1))
+  keeper="${files[0]}"
+  size="${sizes_by_hash[$hash]}"
+  {
+    echo "重复组 $group_no"
+    echo "  MD5: $hash"
+    echo "  大小: $size bytes"
+    echo "  保留: $(basename "$keeper")"
+    echo "        $keeper"
+  } | tee -a "$REPORT"
+  for ((i = 1; i < ${#files[@]}; i++)); do
+    dup="${files[$i]}"
+    duplicate_count=$((duplicate_count + 1))
+    release_bytes=$((release_bytes + size))
+    delete_list+=("$dup")
+    {
+      echo "  待删除重复文件: $(basename "$dup")"
+      echo "        $dup"
+    } | tee -a "$REPORT"
+    printf 'delete_file=%q path=%q size_bytes=%s keeper=%q\n' "$(basename "$dup")" "$dup" "$size" "$keeper" >>"$PLAN_LOG"
+  done
+  echo "" | tee -a "$REPORT"
+done
+
+if ((duplicate_count == 0)); then
+  echo "未发现重复文件。" | tee -a "$REPORT"
+  lab_ops_log "dedupe: no duplicates report=$REPORT"
+  exit 0
+fi
+
+echo "共发现 ${duplicate_count} 个重复副本，预计释放 ${release_bytes} bytes。" | tee -a "$REPORT"
+echo "报告已保存: $REPORT"
+echo ""
+
+if [[ ! -t 0 ]]; then
+  echo "当前不是交互式终端，自动返回，不删除任何文件。"
+  lab_ops_log "dedupe: non-interactive terminal, cancelled"
+  exit 0
+fi
+
+answer=""
+read -r -t 30 -p "确认删除以上重复副本吗？请输入 y 确认，30 秒未确认自动返回: " answer || true
+echo ""
+case "$answer" in
+  y|Y|yes|YES)
+    for dup in "${delete_list[@]}"; do
+      if lab_ops_is_path_whitelisted "$dup"; then
+        lab_ops_log "dedupe: skip delete whitelist file=$(basename "$dup") path=$dup"
+        continue
+      fi
+      rm -f -- "$dup"
+      echo "已删除: $dup"
+      lab_ops_log "dedupe: removed file=$(basename "$dup") path=$dup"
+    done
+    echo "重复文件清理完成。"
+    lab_ops_log "dedupe: removed_count=$duplicate_count release_bytes=$release_bytes"
+    ;;
+  *)
+    echo "未确认或超时，已返回，不删除任何文件。"
+    lab_ops_log "dedupe: cancelled or timeout"
+    ;;
+esac

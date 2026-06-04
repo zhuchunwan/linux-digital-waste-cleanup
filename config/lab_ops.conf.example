@@ -1,25 +1,29 @@
-# Copy to lab_ops.conf and adjust paths.
-# source from project root:  . "$(dirname "$0")/../config/lab_ops.conf"
+# Copy to config/lab_ops.conf and adjust paths if needed.
 
-# 默认可写：项目内 test/（仓库自带样例数据，便于本地/实验机联调）
+# 默认扫描目录：项目自带 test 样例目录
 LAB_OPS_SCAN_ROOT="${LAB_OPS_SCAN_ROOT:-$LAB_OPS_HOME/test}"
 
-# 报表与日志默认放在项目目录下（无需 /var/lib 权限）
+# 报表、日志、归档目录
 LAB_OPS_REPORT_DIR="${LAB_OPS_REPORT_DIR:-$LAB_OPS_HOME/reports}"
 LAB_OPS_LOG_DIR="${LAB_OPS_LOG_DIR:-$LAB_OPS_HOME/logs}"
+LAB_OPS_ARCHIVE_DIR="${LAB_OPS_ARCHIVE_DIR:-$LAB_OPS_HOME/archives}"
 
-# dry-run: 1 = only print actions, 0 = execute destructive steps
-LAB_OPS_DRY_RUN="${LAB_OPS_DRY_RUN:-1}"
+# 文件白名单：这些文件或目录不会被扫描、清理、归档
+LAB_OPS_FILE_WHITELIST="${LAB_OPS_FILE_WHITELIST:-$LAB_OPS_HOME/config/file_whitelist.txt}"
 
-# run_all 是否调用各子步骤（去重默认关闭，首次请手工在小目录验证）
-LAB_OPS_RUN_DEDUPE="${LAB_OPS_RUN_DEDUPE:-0}"
-LAB_OPS_RUN_DOCKER="${LAB_OPS_RUN_DOCKER:-1}"
-
-# Dedupe: minimum file size (bytes) to consider for hashing
+# 重复文件扫描：小于该大小的文件默认跳过，避免无意义的小文件比较
 LAB_OPS_DEDUPE_MIN_BYTES="${LAB_OPS_DEDUPE_MIN_BYTES:-1024}"
 
-# Docker: remove exited containers older than this many days (only when LAB_OPS_DRY_RUN=0)
-LAB_OPS_DOCKER_EXITED_DAYS="${LAB_OPS_DOCKER_EXITED_DAYS:-7}"
+# 过期文件管理：超过 30 天未使用的文件自动打包压缩
+LAB_OPS_COLD_DAYS="${LAB_OPS_COLD_DAYS:-30}"
+# atime = 访问时间；mtime = 修改时间；ctime = 元数据变更时间
+LAB_OPS_COLD_TIME_FIELD="${LAB_OPS_COLD_TIME_FIELD:-atime}"
+LAB_OPS_COLD_MIN_BYTES="${LAB_OPS_COLD_MIN_BYTES:-1}"
 
-# One container name or ID per line; never remove these
+# 过期日志清理：自动删除 30 天前的日志文件
+LAB_OPS_LOG_RETENTION_DAYS="${LAB_OPS_LOG_RETENTION_DAYS:-30}"
+LAB_OPS_LOG_TARGETS="${LAB_OPS_LOG_TARGETS:-$LAB_OPS_LOG_DIR}"
+
+# Docker 巡检：清理退出超过 N 天的容器；容器白名单逐行写入 docker_whitelist.txt
+LAB_OPS_DOCKER_EXITED_DAYS="${LAB_OPS_DOCKER_EXITED_DAYS:-7}"
 LAB_OPS_DOCKER_WHITELIST="${LAB_OPS_DOCKER_WHITELIST:-$LAB_OPS_HOME/config/docker_whitelist.txt}"

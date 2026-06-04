@@ -1,6 +1,8 @@
-# 每日 02:15 以低优先级执行（路径请改为实际克隆目录）
+# 交互菜单 ./scripts/run_all.sh 不适合放入 cron。
+# 如需自动任务，建议只自动执行过期日志清理。
+
 SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
-# 复制 lab_ops.conf.example -> config/lab_ops.conf 后编辑
-15 2 * * * lab /opt/lab-ops/scripts/run_all.sh /data >>/var/lib/lab-ops/logs/cron.log 2>&1
+# 每天 02:30 自动删除超过 30 天的日志文件
+30 2 * * * lab /opt/lab-ops/scripts/cleanup_logs.sh >>/opt/lab-ops/logs/cron.log 2>&1

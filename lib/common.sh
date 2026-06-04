@@ -22,9 +22,15 @@ lab_ops_load_config() {
   LAB_OPS_DEDUPE_MIN_BYTES="${LAB_OPS_DEDUPE_MIN_BYTES:-1024}"
   LAB_OPS_DOCKER_EXITED_DAYS="${LAB_OPS_DOCKER_EXITED_DAYS:-7}"
   LAB_OPS_DOCKER_WHITELIST="${LAB_OPS_DOCKER_WHITELIST:-$root/config/docker_whitelist.txt}"
-  LAB_OPS_RUN_DEDUPE="${LAB_OPS_RUN_DEDUPE:-0}"
-  LAB_OPS_RUN_DOCKER="${LAB_OPS_RUN_DOCKER:-1}"
-  mkdir -p "$LAB_OPS_REPORT_DIR" "$LAB_OPS_LOG_DIR"
+  LAB_OPS_FILE_WHITELIST="${LAB_OPS_FILE_WHITELIST:-$root/config/file_whitelist.txt}"
+  LAB_OPS_ARCHIVE_DIR="${LAB_OPS_ARCHIVE_DIR:-$root/archives}"
+  LAB_OPS_COLD_DAYS="${LAB_OPS_COLD_DAYS:-30}"
+  LAB_OPS_COLD_TIME_FIELD="${LAB_OPS_COLD_TIME_FIELD:-atime}"
+  LAB_OPS_COLD_MIN_BYTES="${LAB_OPS_COLD_MIN_BYTES:-1}"
+  LAB_OPS_LOG_RETENTION_DAYS="${LAB_OPS_LOG_RETENTION_DAYS:-30}"
+  LAB_OPS_LOG_TARGETS="${LAB_OPS_LOG_TARGETS:-$LAB_OPS_LOG_DIR}"
+  mkdir -p "$LAB_OPS_REPORT_DIR" "$LAB_OPS_LOG_DIR" "$LAB_OPS_ARCHIVE_DIR" "$(dirname "$LAB_OPS_FILE_WHITELIST")"
+  touch "$LAB_OPS_FILE_WHITELIST"
 }
 
 lab_ops_log() {
@@ -34,6 +40,37 @@ lab_ops_log() {
 
 lab_ops_is_true() {
   [[ "$1" == "1" || "$1" == "true" || "$1" == "yes" ]]
+}
+
+lab_ops_abs_path() {
+  local path="$1" dir base
+  if command -v realpath >/dev/null 2>&1; then
+    realpath -m "$path" 2>/dev/null && return 0
+  fi
+  dir="$(dirname "$path")"
+  base="$(basename "$path")"
+  if [[ -d "$dir" ]]; then
+    printf '%s/%s\n' "$(cd "$dir" && pwd -P)" "$base"
+  else
+    printf '%s\n' "$path"
+  fi
+}
+
+lab_ops_is_path_whitelisted() {
+  local path="$1" abs line wl_abs
+  [[ -f "${LAB_OPS_FILE_WHITELIST:-}" ]] || return 1
+  abs="$(lab_ops_abs_path "$path")"
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line%%#*}"
+    line="${line#"${line%%[![:space:]]*}"}"
+    line="${line%"${line##*[![:space:]]}"}"
+    [[ -z "$line" ]] && continue
+    wl_abs="$(lab_ops_abs_path "$line")"
+    if [[ "$abs" == "$wl_abs" || "$abs" == "$wl_abs/"* ]]; then
+      return 0
+    fi
+  done <"$LAB_OPS_FILE_WHITELIST"
+  return 1
 }
 
 # 二次确认机制：在非 dry-run 模式下强制要求用户交互确认
