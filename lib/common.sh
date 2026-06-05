@@ -23,19 +23,26 @@ lab_ops_load_config() {
   LAB_OPS_DOCKER_EXITED_DAYS="${LAB_OPS_DOCKER_EXITED_DAYS:-7}"
   LAB_OPS_DOCKER_WHITELIST="${LAB_OPS_DOCKER_WHITELIST:-$root/config/docker_whitelist.txt}"
   LAB_OPS_FILE_WHITELIST="${LAB_OPS_FILE_WHITELIST:-$root/config/file_whitelist.txt}"
-  LAB_OPS_ARCHIVE_DIR="${LAB_OPS_ARCHIVE_DIR:-$root/archives}"
   LAB_OPS_COLD_DAYS="${LAB_OPS_COLD_DAYS:-30}"
   LAB_OPS_COLD_TIME_FIELD="${LAB_OPS_COLD_TIME_FIELD:-atime}"
-  LAB_OPS_COLD_MIN_BYTES="${LAB_OPS_COLD_MIN_BYTES:-1}"
   LAB_OPS_LOG_RETENTION_DAYS="${LAB_OPS_LOG_RETENTION_DAYS:-30}"
+  LAB_OPS_REPORT_RETENTION_DAYS="${LAB_OPS_REPORT_RETENTION_DAYS:-$LAB_OPS_LOG_RETENTION_DAYS}"
   LAB_OPS_LOG_TARGETS="${LAB_OPS_LOG_TARGETS:-$LAB_OPS_LOG_DIR}"
-  mkdir -p "$LAB_OPS_REPORT_DIR" "$LAB_OPS_LOG_DIR" "$LAB_OPS_ARCHIVE_DIR" "$(dirname "$LAB_OPS_FILE_WHITELIST")"
+  mkdir -p "$LAB_OPS_REPORT_DIR" "$LAB_OPS_LOG_DIR" "$(dirname "$LAB_OPS_FILE_WHITELIST")"
   touch "$LAB_OPS_FILE_WHITELIST"
 }
 
 lab_ops_log() {
   local msg="[$(date -Iseconds)] $*"
   echo "$msg" | tee -a "${LAB_OPS_LOG_DIR}/lab_ops.log" >&2
+}
+
+lab_ops_report_path() {
+  local name="$1"
+  local day="${2:-$(date +%Y-%m-%d)}"
+  local dir="${LAB_OPS_REPORT_DIR}/${day}"
+  mkdir -p "$dir"
+  printf '%s/%s\n' "$dir" "$name"
 }
 
 lab_ops_is_true() {
@@ -67,6 +74,23 @@ lab_ops_is_path_whitelisted() {
     [[ -z "$line" ]] && continue
     wl_abs="$(lab_ops_abs_path "$line")"
     if [[ "$abs" == "$wl_abs" || "$abs" == "$wl_abs/"* ]]; then
+      return 0
+    fi
+  done <"$LAB_OPS_FILE_WHITELIST"
+  return 1
+}
+
+lab_ops_contains_whitelisted_path() {
+  local dir="$1" dir_abs line wl_abs
+  [[ -f "${LAB_OPS_FILE_WHITELIST:-}" ]] || return 1
+  dir_abs="$(lab_ops_abs_path "$dir")"
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line%%#*}"
+    line="${line#"${line%%[![:space:]]*}"}"
+    line="${line%"${line##*[![:space:]]}"}"
+    [[ -z "$line" ]] && continue
+    wl_abs="$(lab_ops_abs_path "$line")"
+    if [[ "$wl_abs" == "$dir_abs" || "$wl_abs" == "$dir_abs/"* ]]; then
       return 0
     fi
   done <"$LAB_OPS_FILE_WHITELIST"

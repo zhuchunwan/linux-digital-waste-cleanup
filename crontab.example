@@ -1,8 +1,8 @@
 # 交互菜单 ./scripts/run_all.sh 不适合放入 cron。
-# 如需自动任务，建议只自动执行过期日志清理。
+# cleanup_logs.sh 不传天数参数时，使用配置中的默认 30 天。
 
 SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
-# 每天 02:30 自动删除超过 30 天的日志文件
+# 每天 02:30 自动删除超过 30 天的日志文件和历史报告
 30 2 * * * lab /opt/lab-ops/scripts/cleanup_logs.sh >>/opt/lab-ops/logs/cron.log 2>&1

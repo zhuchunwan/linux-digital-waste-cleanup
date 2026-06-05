@@ -1,29 +1,61 @@
-# Copy to config/lab_ops.conf and adjust paths if needed.
+# ============================================================
+# 实验室 Linux 数字垃圾治理系统 - 配置文件样例
+# 复制命令：cp config/lab_ops.conf.example config/lab_ops.conf
+# ============================================================
+#
+# 修改方法：
+#   直接修改每个参数最后面的默认值，例如：
+#     LAB_OPS_COLD_DAYS="${LAB_OPS_COLD_DAYS:-60}"
+#
+# 路径建议使用绝对路径，或使用 $LAB_OPS_HOME 表示项目根目录。
 
-# 默认扫描目录：项目自带 test 样例目录
+# 默认扫描目录。
+# 可修改为任意存在且有权限访问的文件夹，例如 /data。
 LAB_OPS_SCAN_ROOT="${LAB_OPS_SCAN_ROOT:-$LAB_OPS_HOME/test}"
 
-# 报表、日志、归档目录
+# 报告根目录。程序会自动创建 reports/日期/ 子目录。
+# 可修改为任意可写文件夹路径。
 LAB_OPS_REPORT_DIR="${LAB_OPS_REPORT_DIR:-$LAB_OPS_HOME/reports}"
-LAB_OPS_LOG_DIR="${LAB_OPS_LOG_DIR:-$LAB_OPS_HOME/logs}"
-LAB_OPS_ARCHIVE_DIR="${LAB_OPS_ARCHIVE_DIR:-$LAB_OPS_HOME/archives}"
 
-# 文件白名单：这些文件或目录不会被扫描、清理、归档
+# 运行日志目录。保存 lab_ops.log 和错误日志。
+# 可修改为任意可写文件夹路径。
+LAB_OPS_LOG_DIR="${LAB_OPS_LOG_DIR:-$LAB_OPS_HOME/logs}"
+
+# 文件白名单文件。每行填写一个不会被处理的文件或文件夹路径。
+# 可修改为任意可读写文本文件路径。
 LAB_OPS_FILE_WHITELIST="${LAB_OPS_FILE_WHITELIST:-$LAB_OPS_HOME/config/file_whitelist.txt}"
 
-# 重复文件扫描：小于该大小的文件默认跳过，避免无意义的小文件比较
+# 重复文件扫描最小大小，单位 bytes。
+# 可修改为大于或等于 0 的整数：0=所有文件，1024=1KB，1048576=1MB。
 LAB_OPS_DEDUPE_MIN_BYTES="${LAB_OPS_DEDUPE_MIN_BYTES:-1024}"
 
-# 过期文件管理：超过 30 天未使用的文件自动打包压缩
+# 指定目标文件或文件夹的过期判断天数。
+# 功能 4 只处理用户输入的单个路径，不扫描同级或子级目标分别压缩。
+# 可修改为大于 0 的整数，例如 7、30、60、90。
 LAB_OPS_COLD_DAYS="${LAB_OPS_COLD_DAYS:-30}"
-# atime = 访问时间；mtime = 修改时间；ctime = 元数据变更时间
-LAB_OPS_COLD_TIME_FIELD="${LAB_OPS_COLD_TIME_FIELD:-atime}"
-LAB_OPS_COLD_MIN_BYTES="${LAB_OPS_COLD_MIN_BYTES:-1}"
 
-# 过期日志清理：自动删除 30 天前的日志文件
+# 指定目标的时间判断字段，只能填写 atime、mtime 或 ctime。
+# 目标为文件夹时，会同时检查内部文件，任一文件近期使用都会保护整个文件夹。
+# atime=最后访问时间；mtime=内容修改时间，课程演示推荐；ctime=元数据变更时间。
+LAB_OPS_COLD_TIME_FIELD="${LAB_OPS_COLD_TIME_FIELD:-atime}"
+
+# crontab 自动日志清理保留天数。
+# 菜单功能 7 使用用户输入的天数，不使用这里的值。
+# 可修改为大于 0 的整数。
 LAB_OPS_LOG_RETENTION_DAYS="${LAB_OPS_LOG_RETENTION_DAYS:-30}"
+
+# crontab 自动报告清理保留天数。
+# 可修改为大于 0 的整数；默认跟随日志保留天数。
+LAB_OPS_REPORT_RETENTION_DAYS="${LAB_OPS_REPORT_RETENTION_DAYS:-$LAB_OPS_LOG_RETENTION_DAYS}"
+
+# 日志清理目标目录，多个路径使用空格分隔，路径本身不要包含空格。
+# 示例："/var/log/my-service /data/train/logs"
 LAB_OPS_LOG_TARGETS="${LAB_OPS_LOG_TARGETS:-$LAB_OPS_LOG_DIR}"
 
-# Docker 巡检：清理退出超过 N 天的容器；容器白名单逐行写入 docker_whitelist.txt
+# Docker 已退出容器保留天数。
+# 可修改为大于或等于 0 的整数，例如 0、7、30。
 LAB_OPS_DOCKER_EXITED_DAYS="${LAB_OPS_DOCKER_EXITED_DAYS:-7}"
+
+# Docker 容器白名单文件。
+# 每行填写一个容器完整 ID、短 ID 或容器名称。
 LAB_OPS_DOCKER_WHITELIST="${LAB_OPS_DOCKER_WHITELIST:-$LAB_OPS_HOME/config/docker_whitelist.txt}"

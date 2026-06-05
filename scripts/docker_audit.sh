@@ -10,16 +10,20 @@ lab_ops_load_config
 
 DAYS="${LAB_OPS_DOCKER_EXITED_DAYS:-7}"
 WL="${LAB_OPS_DOCKER_WHITELIST}"
-REPORT="${LAB_OPS_REPORT_DIR}/docker_audit_$(date +%Y-%m-%d).txt"
+DATE="$(date +%Y-%m-%d)"
+REPORT="$(lab_ops_report_path "docker_audit.txt" "$DATE")"
 
 lab_ops_log "docker_audit: days=$DAYS report=$REPORT"
 
 command -v docker >/dev/null || {
   {
+    echo ""
+    echo "============================================================"
     echo "Docker 资产巡检报告"
+    echo "生成时间: $(date '+%Y-%m-%d %H:%M:%S')"
     echo "Docker 命令不存在，本机跳过 Docker 巡检。"
     echo "请在安装 Docker 的 Linux/WSL2/服务器环境运行此功能。"
-  } | tee "$REPORT"
+  } | tee -a "$REPORT"
   lab_ops_log "docker_audit: docker not in PATH"
   exit 0
 }
@@ -43,12 +47,14 @@ images=()
 volumes=()
 
 {
+  echo ""
+  echo "============================================================"
   echo "Docker 资产巡检报告"
   echo "生成时间: $(date '+%Y-%m-%d %H:%M:%S')"
   echo "容器白名单: $WL"
   echo ""
   echo "一、退出超过 ${DAYS} 天的容器"
-} | tee "$REPORT"
+} | tee -a "$REPORT"
 
 while read -r cid name; do
   [[ -z "$cid" ]] && continue

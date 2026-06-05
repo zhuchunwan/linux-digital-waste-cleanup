@@ -10,7 +10,7 @@ TARGET="$(mkdir -p "$TARGET" && cd "$TARGET" && pwd -P)"
 
 echo "Creating messy fixture under: $TARGET"
 
-mkdir -p "$TARGET"/{datasets,models,logs,papers,images,tmp}
+mkdir -p "$TARGET"/{datasets,models,logs,papers,images,tmp,old_project/results}
 
 payload="$TARGET/datasets/shared_payload.bin"
 dd if=/dev/zero of="$payload" bs=1024 count=2 status=none
@@ -23,6 +23,8 @@ printf 'old service log\n' >"$TARGET/logs/service.log"
 printf 'very old stderr\n' >"$TARGET/logs/train.err"
 printf 'paper notes\n' >"$TARGET/papers/notes without extension"
 printf 'temporary scratch\n' >"$TARGET/tmp/run scratch.tmp"
+printf 'old experiment result\n' >"$TARGET/old_project/results/result.txt"
+printf 'old experiment config\n' >"$TARGET/old_project/config.txt"
 
 if command -v convert >/dev/null; then
   convert -size 4x4 xc:white "$TARGET/images/tiny.png" >/dev/null 2>&1 || true
@@ -32,6 +34,7 @@ fi
 
 touch -a -d '45 days ago' "$TARGET/datasets/shared_payload_copy.bin" "$TARGET/logs/service.log" "$TARGET/logs/train.err" "$TARGET/tmp/run scratch.tmp" 2>/dev/null || true
 touch -m -d '45 days ago' "$TARGET/datasets/shared_payload_copy.bin" "$TARGET/logs/service.log" "$TARGET/logs/train.err" "$TARGET/tmp/run scratch.tmp" 2>/dev/null || true
+find "$TARGET/old_project" -exec touch -a -m -d '45 days ago' {} + 2>/dev/null || true
 
 if [[ "${LAB_OPS_MAKE_DOCKER:-0}" == "1" ]]; then
   if command -v docker >/dev/null; then
@@ -54,3 +57,4 @@ if [[ "${LAB_OPS_MAKE_DOCKER:-0}" == "1" ]]; then
 fi
 
 echo "Messy fixture ready."
+echo "功能 4 过期文件夹测试路径: $TARGET/old_project"

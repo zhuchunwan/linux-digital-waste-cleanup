@@ -9,10 +9,10 @@
     1. 磁盘空间审计
     2. 重复文件清理
     3. 白名单功能
-    4. 过期文件管理
+    4. 过期文件或文件夹管理
     5. Docker 资产巡检与回收
     6. 构造测试混乱现场
-    7. 过期日志清理
+    7. 手动清理过期日志和历史报告
     8. 退出
 
 二、首次准备
@@ -22,36 +22,60 @@
 三、功能说明
   1) 磁盘空间审计
      用户输入一个文件夹，程序显示该文件夹下每个文件的名称、大小和完整路径。
-     报告保存到 reports/disk_audit_日期.txt。
+     审计结果会同时显示：
+       文件总数：路径数量，硬链接合并后不会减少。
+       路径大小合计：每个路径各算一次，所以硬链接后通常不变。
+       实际占用大小：相同 inode 只算一次，硬链接合并后会变小。
+       硬链接节省空间：路径大小合计 - 实际占用大小。
+     报告追加保存到 reports/日期/disk_audit.txt。
 
   2) 重复文件清理
      用户输入一个文件夹，程序扫描重复文件并在屏幕显示所有重复组。
-     每组保留第一个文件，其余重复副本列为待删除。
-     用户必须在 30 秒内输入 y 确认；未确认或超时会自动返回，不删除文件。
-     报告保存到 reports/duplicate_files_日期.txt。
+     每组保留第一个文件，其余重复副本通过硬链接指向同一个 inode。
+     文件路径不会消失，因此原来引用重复文件路径的程序不会找不到文件。
+     用户必须在 30 秒内输入 y 确认；未确认或超时会自动返回，不修改文件。
+     报告追加保存到 reports/日期/duplicate_files.txt。
+     合并计划追加保存到 reports/日期/duplicate_plan.txt。
 
   3) 白名单功能
      用户输入文件或文件夹路径，程序追加到 config/file_whitelist.txt。
-     白名单路径不会被磁盘审计、重复文件清理、过期文件打包和日志清理处理。
+     白名单路径不会被磁盘审计、重复文件清理、过期目标压缩和日志清理处理。
 
-  4) 过期文件管理
-     用户输入一个文件夹，程序查找超过 30 天未使用的文件并自动打包压缩。
+  4) 过期文件或文件夹管理
+     用户输入一个需要处理的文件或文件夹完整路径，程序只判断该路径本身，
+     不会把该文件夹下的每个文件或子文件夹分别压缩。
+     普通文件的时间超过 30 天时会列为候选；文件夹及其内部文件的最新时间
+     仍超过 30 天时，整个文件夹才会列为候选。
      默认依据 atime，即访问时间；可在 config/lab_ops.conf 修改为 mtime 或 ctime。
-     压缩包保存到 archives/expired_files_时间.tar.gz。
-     本功能只打包，不删除原文件。
+     用户必须在 30 秒内输入 y 确认；未确认或超时不会修改目标。
+     确认后，压缩包保存到原目标旁边，例如：
+       /mnt/d/acm/cl  ->  /mnt/d/acm/cl.tar.gz
+     程序会验证压缩包可以读取，验证成功后删除原文件或整个原文件夹。
+     用户后续需要使用时，可在原路径使用 tar -xzf cl.tar.gz 解压。
+     报告追加保存到 reports/日期/expired_targets.txt。
 
   5) Docker 资产巡检与回收
      程序显示退出超过指定天数的容器、虚悬镜像和僵尸数据卷。
      用户必须在 30 秒内输入 y 确认才会回收 Docker 资产。
      Docker 容器白名单写在 config/docker_whitelist.txt。
+     报告追加保存到 reports/日期/docker_audit.txt。
 
   6) 构造测试混乱现场
      自动生成 test/mess 测试目录，用于演示重复文件、过期日志、过期文件等场景。
+     其中 test/mess/old_project 是功能 4 可直接使用的过期文件夹测试目标。
 
-  7) 过期日志清理
-     自动删除超过 30 天的 *.log、*.log.*、*.out、*.err 文件。
+  7) 手动清理过期日志和历史报告
+     用户输入要清理多少天之前的内容，例如输入 7，则清理超过 7 天的日志和报告。
+     删除符合天数条件的 *.log、*.log.*、*.out、*.err 文件。
      默认清理 logs/ 目录，可在 config/lab_ops.conf 修改 LAB_OPS_LOG_TARGETS。
-     报告保存到 reports/deleted_logs_日期.txt。
+     同时清理 reports/ 下超过用户输入天数的历史日期报告文件夹，以及旧版散落报告文件。
+     报告追加保存到 reports/日期/deleted_logs.txt。
+
+  自动清理任务（不显示在功能菜单中）
+     scripts/cleanup_logs.sh 不传参数时，使用配置中的默认保留天数 30 天。
+     crontab.example 已配置每天 02:30 自动清理超过 30 天的日志文件和历史报告。
+     安装示例：
+       crontab crontab.example
 
   8) 退出
      退出总程序。
@@ -59,19 +83,19 @@
 四、配置文件
   主要配置在 config/lab_ops.conf：
     LAB_OPS_SCAN_ROOT             默认扫描目录
-    LAB_OPS_REPORT_DIR            报告目录
+    LAB_OPS_REPORT_DIR            报告根目录，每天自动生成一个日期子文件夹
     LAB_OPS_LOG_DIR               运行日志目录
-    LAB_OPS_ARCHIVE_DIR           过期文件压缩包目录
     LAB_OPS_FILE_WHITELIST        文件白名单
     LAB_OPS_DEDUPE_MIN_BYTES      重复文件扫描最小大小
-    LAB_OPS_COLD_DAYS             过期文件天数，默认 30
+    LAB_OPS_COLD_DAYS             目标文件或文件夹过期天数，默认 30
     LAB_OPS_COLD_TIME_FIELD       atime/mtime/ctime
     LAB_OPS_LOG_RETENTION_DAYS    日志保留天数，默认 30
+    LAB_OPS_REPORT_RETENTION_DAYS 报告保留天数，默认跟随日志保留天数
     LAB_OPS_LOG_TARGETS           日志清理目录
     LAB_OPS_DOCKER_EXITED_DAYS    Docker 退出容器保留天数
     LAB_OPS_DOCKER_WHITELIST      Docker 容器白名单
 
 五、安全提示
-  重复文件清理和 Docker 回收都需要 30 秒内手动确认。
+  重复文件硬链接合并和 Docker 回收都需要 30 秒内手动确认。
   白名单里的路径会被跳过。
   首次演示建议先运行功能 6 构造 test/mess，再对 test/mess 使用其他功能。
