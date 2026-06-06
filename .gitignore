@@ -1,8 +1,6 @@
 # 生成的报表与日志（每次运行产生，不纳入版本管理）
 reports/
 logs/
-archives/
-organized/
 test/mess/
 
 # 用户本地配置（从 .example 复制后修改，不提交）

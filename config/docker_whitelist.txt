@@ -1,3 +1,5 @@
 # One Docker container name (as shown in docker ps) or ID per line.
 # Lines starting with # are ignored.
 # example-base-container
+lab-demo-protected
+lab_ops_demo_protected

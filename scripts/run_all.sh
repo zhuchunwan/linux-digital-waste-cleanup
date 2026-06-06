@@ -26,10 +26,10 @@ prompt_archive_target() {
 
 prompt_cleanup_days() {
   local input
-  read -r -p "请输入要清理多少天之前的日志和报告 [默认: 30]: " input || input=""
+  read -r -p "请输入要清理多少天之前的日志和报告，输入 0 清空 logs 和 reports [默认: 30]: " input || input=""
   input="${input:-30}"
-  if [[ ! "$input" =~ ^[1-9][0-9]*$ ]]; then
-    echo "错误：清理天数必须是大于 0 的整数。" >&2
+  if [[ ! "$input" =~ ^[0-9]+$ ]]; then
+    echo "错误：清理天数必须是大于或等于 0 的整数。" >&2
     return 1
   fi
   printf '%s' "$input"
@@ -76,7 +76,7 @@ show_menu() {
   echo "  4. 过期文件或文件夹管理：判断并压缩用户指定的单个路径"
   echo "  5. Docker 资产巡检与回收"
   echo "  6. 构造测试混乱现场"
-  echo "  7. 手动清理过期日志和历史报告：用户输入需要清理的天数"
+  echo "  7. 手动清理日志和报告：输入天数，输入 0 清空 logs 和 reports"
   echo "  8. 退出"
   echo ""
 }

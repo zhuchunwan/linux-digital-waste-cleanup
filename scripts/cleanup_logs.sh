@@ -9,8 +9,8 @@ source "$ROOT_DIR/../lib/common.sh"
 lab_ops_load_config
 
 if [[ -n "${1:-}" ]]; then
-  if [[ ! "$1" =~ ^[1-9][0-9]*$ ]]; then
-    echo "错误：清理天数必须是大于 0 的整数。" >&2
+  if [[ ! "$1" =~ ^[0-9]+$ ]]; then
+    echo "错误：清理天数必须是大于或等于 0 的整数。" >&2
     exit 1
   fi
   DAYS="$1"
@@ -21,6 +21,48 @@ else
   REPORT_DAYS="${LAB_OPS_REPORT_RETENTION_DAYS:-$DAYS}"
   RUN_MODE="crontab/默认配置"
 fi
+
+resolve_safe_clear_dir() {
+  local dir="$1" label="$2" abs project_path
+  [[ -n "$dir" ]] || {
+    echo "错误：${label}目录路径为空，拒绝清空。" >&2
+    return 1
+  }
+  mkdir -p "$dir"
+  abs="$(cd "$dir" && pwd -P)"
+  if [[ "$abs" == "/" ]]; then
+    echo "错误：${label}目录不能是系统根目录 /，拒绝清空。" >&2
+    return 1
+  fi
+  project_path="$(cd "$LAB_OPS_HOME" && pwd -P)"
+  if [[ "$project_path" == "$abs" || "$project_path" == "$abs/"* ]]; then
+    echo "错误：${label}目录是项目目录或其上级目录，拒绝清空: $abs" >&2
+    return 1
+  fi
+  printf '%s\n' "$abs"
+}
+
+clear_all_contents() {
+  local abs="$1" label="$2" count bytes
+  mkdir -p "$abs"
+  count="$(find "$abs" -mindepth 1 -maxdepth 1 -print 2>/dev/null | wc -l | awk '{print $1}')"
+  bytes="$(du -sb "$abs" 2>/dev/null | awk '{print $1}' || echo 0)"
+  find "$abs" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+  echo "已清空${label}目录: $abs"
+  echo "删除顶层项目数: $count，清理前目录大小: ${bytes} bytes"
+}
+
+if [[ "$RUN_MODE" == "用户手动指定" ]] && ((10#$DAYS == 0)); then
+  echo "输入 0：开始清空 logs 和 reports 目录下的全部内容。"
+  LOG_CLEAR_DIR="$(resolve_safe_clear_dir "$LAB_OPS_LOG_DIR" "日志")"
+  REPORT_CLEAR_DIR="$(resolve_safe_clear_dir "$LAB_OPS_REPORT_DIR" "报告")"
+  clear_all_contents "$LOG_CLEAR_DIR" "日志"
+  clear_all_contents "$REPORT_CLEAR_DIR" "报告"
+  mkdir -p "$LAB_OPS_LOG_DIR" "$LAB_OPS_REPORT_DIR"
+  echo "清空完成，logs 和 reports 根目录已保留。"
+  exit 0
+fi
+
 DATE="$(date +%Y-%m-%d)"
 REPORT="$(lab_ops_report_path "deleted_logs.txt" "$DATE")"
 ERR="${LAB_OPS_LOG_DIR}/log_cleanup_errors.log"

@@ -41,10 +41,12 @@ LAB_OPS_COLD_TIME_FIELD="${LAB_OPS_COLD_TIME_FIELD:-atime}"
 
 # crontab 自动日志清理保留天数。
 # 菜单功能 7 使用用户输入的天数，不使用这里的值。
+# 菜单功能 7 输入 0 时，会清空 logs 和 reports 下的全部内容。
 # 可修改为大于 0 的整数。
 LAB_OPS_LOG_RETENTION_DAYS="${LAB_OPS_LOG_RETENTION_DAYS:-30}"
 
 # crontab 自动报告清理保留天数。
+# 菜单功能 7 输入 0 的清空模式不使用该值。
 # 可修改为大于 0 的整数；默认跟随日志保留天数。
 LAB_OPS_REPORT_RETENTION_DAYS="${LAB_OPS_REPORT_RETENTION_DAYS:-$LAB_OPS_LOG_RETENTION_DAYS}"
 
