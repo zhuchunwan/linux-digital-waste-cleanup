@@ -9,7 +9,7 @@
     1. 磁盘空间审计
     2. 重复文件清理
     3. 白名单功能
-    4. 过期文件或文件夹管理
+    4. 过期文件管理
     5. Docker 资产巡检与回收
     6. 构造测试混乱现场
     7. 手动清理过期日志和历史报告
@@ -39,30 +39,31 @@
 
   3) 白名单功能
      用户输入文件或文件夹路径，程序追加到 config/file_whitelist.txt。
-     白名单路径不会被磁盘审计、重复文件清理、过期目标压缩和日志清理处理。
+     白名单路径不会被磁盘审计、重复文件清理、过期文件压缩和日志清理处理。
 
-  4) 过期文件或文件夹管理
-     用户输入一个需要处理的文件或文件夹完整路径，程序只判断该路径本身，
-     不会把该文件夹下的每个文件或子文件夹分别压缩。
-     普通文件的时间超过 30 天时会列为候选；文件夹及其内部文件的最新时间
-     仍超过 30 天时，整个文件夹才会列为候选。
+  4) 过期文件管理
+     用户输入一个文件夹，程序递归扫描该路径下的所有普通文件。
+     每个超过 30 天未使用的文件都会显示在候选清单中；软链接、白名单路径和
+     已有 .tar.gz 压缩包会被跳过。
      默认依据 atime，即访问时间；可在 config/lab_ops.conf 修改为 mtime 或 ctime。
-     用户必须在 30 秒内输入 y 确认；未确认或超时不会修改目标。
-     确认后，压缩包保存到原目标旁边，例如：
-       /mnt/d/acm/cl  ->  /mnt/d/acm/cl.tar.gz
-     程序会验证压缩包可以读取，验证成功后删除原文件或整个原文件夹。
-     用户后续需要使用时，可在原路径使用 tar -xzf cl.tar.gz 解压。
-     报告追加保存到 reports/日期/expired_targets.txt。
+     用户必须在 30 秒内输入 y 确认；未确认或超时不会修改任何文件。
+     确认后，每个候选文件都会在原目录单独生成压缩包，例如：
+       /mnt/d/acm/cl/a.txt  ->  /mnt/d/acm/cl/a.txt.tar.gz
+     程序会验证压缩包可以读取，并再次确认源文件未发生变化；验证成功后才删除原文件。
+     原文件夹和目录结构会保留，用户后续可在原路径使用 tar -xzf a.txt.tar.gz 解压。
+     报告追加保存到 reports/日期/expired_files.txt。
 
   5) Docker 资产巡检与回收
-     程序显示退出超过指定天数的容器、虚悬镜像和僵尸数据卷。
+     程序显示停止超过指定天数的容器、虚悬镜像和僵尸数据卷。
      用户必须在 30 秒内输入 y 确认才会回收 Docker 资产。
+     删除停止容器后，程序会继续复扫并回收新产生的虚悬镜像和僵尸数据卷。
+     清理结束后会再次复检；删除失败时会显示具体原因和剩余资产清单。
      Docker 容器白名单写在 config/docker_whitelist.txt。
      报告追加保存到 reports/日期/docker_audit.txt。
 
   6) 构造测试混乱现场
      自动生成 test/mess 测试目录，用于演示重复文件、过期日志、过期文件等场景。
-     其中 test/mess/old_project 是功能 4 可直接使用的过期文件夹测试目标。
+     test/mess 可直接作为功能 4 的扫描目录，演示逐个压缩其中的过期文件。
 
   7) 手动清理过期日志和历史报告
      用户输入要清理多少天之前的内容，例如输入 7，则清理超过 7 天的日志和报告。
@@ -90,15 +91,15 @@
     LAB_OPS_LOG_DIR               运行日志目录
     LAB_OPS_FILE_WHITELIST        文件白名单
     LAB_OPS_DEDUPE_MIN_BYTES      重复文件扫描最小大小
-    LAB_OPS_COLD_DAYS             目标文件或文件夹过期天数，默认 30
+    LAB_OPS_COLD_DAYS             文件过期天数，默认 30
     LAB_OPS_COLD_TIME_FIELD       atime/mtime/ctime
     LAB_OPS_LOG_RETENTION_DAYS    日志保留天数，默认 30
     LAB_OPS_REPORT_RETENTION_DAYS 报告保留天数，默认跟随日志保留天数
     LAB_OPS_LOG_TARGETS           日志清理目录
-    LAB_OPS_DOCKER_EXITED_DAYS    Docker 退出容器保留天数
+    LAB_OPS_DOCKER_EXITED_DAYS    Docker 停止容器保留天数
     LAB_OPS_DOCKER_WHITELIST      Docker 容器白名单
 
 五、安全提示
-  重复文件硬链接合并和 Docker 回收都需要 30 秒内手动确认。
+  重复文件硬链接合并、过期文件压缩和 Docker 回收都需要 30 秒内手动确认。
   白名单里的路径会被跳过。
   首次演示建议先运行功能 6 构造 test/mess，再对 test/mess 使用其他功能。

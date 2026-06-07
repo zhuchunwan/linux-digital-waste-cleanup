@@ -29,13 +29,12 @@ LAB_OPS_FILE_WHITELIST="${LAB_OPS_FILE_WHITELIST:-$LAB_OPS_HOME/config/file_whit
 # 可修改为大于或等于 0 的整数：0=所有文件，1024=1KB，1048576=1MB。
 LAB_OPS_DEDUPE_MIN_BYTES="${LAB_OPS_DEDUPE_MIN_BYTES:-1024}"
 
-# 指定目标文件或文件夹的过期判断天数。
-# 功能 4 只处理用户输入的单个路径，不扫描同级或子级目标分别压缩。
+# 功能 4 扫描目录内普通文件时使用的过期判断天数。
+# 超过该天数的文件会列为候选，确认后在原目录单独压缩并删除原文件。
 # 可修改为大于 0 的整数，例如 7、30、60、90。
 LAB_OPS_COLD_DAYS="${LAB_OPS_COLD_DAYS:-30}"
 
-# 指定目标的时间判断字段，只能填写 atime、mtime 或 ctime。
-# 目标为文件夹时，会同时检查内部文件，任一文件近期使用都会保护整个文件夹。
+# 功能 4 判断每个文件是否过期时使用的时间字段，只能填写 atime、mtime 或 ctime。
 # atime=最后访问时间；mtime=内容修改时间，课程演示推荐；ctime=元数据变更时间。
 LAB_OPS_COLD_TIME_FIELD="${LAB_OPS_COLD_TIME_FIELD:-atime}"
 
@@ -54,8 +53,8 @@ LAB_OPS_REPORT_RETENTION_DAYS="${LAB_OPS_REPORT_RETENTION_DAYS:-$LAB_OPS_LOG_RET
 # 示例："/var/log/my-service /data/train/logs"
 LAB_OPS_LOG_TARGETS="${LAB_OPS_LOG_TARGETS:-$LAB_OPS_LOG_DIR}"
 
-# Docker 已退出容器保留天数。
-# 可修改为大于或等于 0 的整数，例如 0、7、30。
+# Docker 停止容器保留天数，功能 5 会检查 created、exited 和 dead 状态。
+# 可修改为大于或等于 0 的整数，例如 0=立即列为候选，7=停止超过 7 天。
 LAB_OPS_DOCKER_EXITED_DAYS="${LAB_OPS_DOCKER_EXITED_DAYS:-7}"
 
 # Docker 容器白名单文件。

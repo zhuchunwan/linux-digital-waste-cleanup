@@ -1,4 +1,4 @@
 # One file or directory path per line.
 # Whitelisted paths are skipped by disk audit, duplicate cleanup,
 # cold-file archive, and log cleanup.
-/mnt/d/linux/linux-digital-waste-cleanup/test/a.txt
+/mnt/d/acm/ssk/sss.cpp

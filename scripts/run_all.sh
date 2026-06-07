@@ -14,16 +14,6 @@ prompt_dir() {
   printf '%s' "${input:-$default_dir}"
 }
 
-prompt_archive_target() {
-  local input
-  read -r -p "请输入需要判断并压缩的文件或文件夹完整路径（不能为空）: " input || input=""
-  if [[ -z "$input" ]]; then
-    echo "未输入目标路径，返回菜单。" >&2
-    return 1
-  fi
-  printf '%s' "$input"
-}
-
 prompt_cleanup_days() {
   local input
   read -r -p "请输入要清理多少天之前的日志和报告，输入 0 清空 logs 和 reports [默认: 30]: " input || input=""
@@ -58,7 +48,7 @@ add_whitelist_path() {
   fi
   printf '%s\n' "$abs" >>"$LAB_OPS_FILE_WHITELIST"
   echo "已加入白名单: $abs"
-  echo "后续磁盘审计、重复文件清理、过期目标压缩、日志清理都会跳过该路径。"
+  echo "后续磁盘审计、重复文件清理、过期文件压缩、日志清理都会跳过该路径。"
 }
 
 show_menu() {
@@ -73,7 +63,7 @@ show_menu() {
   echo "  1. 磁盘空间审计：显示文件夹下文件名称和大小"
   echo "  2. 重复文件清理：显示重复文件，30 秒内确认后硬链接合并"
   echo "  3. 白名单功能：手动添加不会被扫描或删除的文件/文件夹"
-  echo "  4. 过期文件或文件夹管理：判断并压缩用户指定的单个路径"
+  echo "  4. 过期文件管理：扫描目录并原地压缩超过指定天数未使用的文件"
   echo "  5. Docker 资产巡检与回收"
   echo "  6. 构造测试混乱现场"
   echo "  7. 手动清理日志和报告：输入天数，输入 0 清空 logs 和 reports"
@@ -100,9 +90,8 @@ while true; do
       add_whitelist_path
       ;;
     4)
-      if target="$(prompt_archive_target)"; then
-        "$ROOT_DIR/archive_cold_data.sh" "$target"
-      fi
+      target="$(prompt_dir "$LAB_OPS_SCAN_ROOT")"
+      "$ROOT_DIR/archive_cold_data.sh" "$target"
       ;;
     5)
       "$ROOT_DIR/docker_audit.sh"
